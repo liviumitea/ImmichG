@@ -17,10 +17,10 @@ metadata:
 type: Opaque
 stringData:
   POSTGRES_USER: immich
-  POSTGRES_PASSWORD: changeme
+  POSTGRES_PASSWORD: immich
   POSTGRES_DB: immich
   DB_USERNAME: immich
-  DB_PASSWORD: changeme
+  DB_PASSWORD: immich
   DB_DATABASE_NAME: immich
 ---
 ###############################################################################
