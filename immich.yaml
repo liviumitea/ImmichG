@@ -195,7 +195,7 @@ spec:
               mountPath: /usr/src/app/upload
       volumes:
         - name: upload
-          emptyDir: {}            # replace with PVC/NFS for persistent media
+          hostPath: /data-nfs/data/immich            # replace with PVC/NFS for persistent media
 ---
 ###############################################################################
 # 7. Immich machine-learning sidecar
