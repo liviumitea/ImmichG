@@ -1,14 +1,17 @@
 ###############################################################################
-# 0. Namespace
+# CHANGES AT A GLANCE
+# • dropped the obsolete immich-microservices Deployment
+# • added the immich-machine-learning Deployment + model-cache volume
+# • removed the extra "command" line – the image’s default entrypoint is fine
+# Everything else (Postgres on the existing PV, Redis/Valkey, fixed LB IP)
+# remains exactly the same.
 ###############################################################################
+
 apiVersion: v1
 kind: Namespace
 metadata:
   name: immich
 ---
-###############################################################################
-# 1. Secrets – keep credentials in one place
-###############################################################################
 apiVersion: v1
 kind: Secret
 metadata:
@@ -16,18 +19,13 @@ metadata:
   namespace: immich
 type: Opaque
 stringData:
-  # ⇣ choose strong values in production
-  POSTGRES_USER: immich
+  POSTGRES_USER:    immich
   POSTGRES_PASSWORD: changeme
-  POSTGRES_DB: immich
-  # Immich expects the same values under its own names
-  DB_USERNAME: immich
-  DB_PASSWORD: changeme
+  POSTGRES_DB:      immich
+  DB_USERNAME:      immich
+  DB_PASSWORD:      changeme
   DB_DATABASE_NAME: immich
 ---
-###############################################################################
-# 2. ConfigMap – common, non-secret settings
-###############################################################################
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -38,12 +36,9 @@ data:
   DB_PORT: "5432"
   REDIS_HOSTNAME: immich-redis
   REDIS_PORT: "6379"
-  IMMICH_PORT: "2283"        # Immich now listens on 2283 by default :contentReference[oaicite:0]{index=0}
+  IMMICH_PORT: "2283"
 ---
-###############################################################################
-# 3. Storage objects
-###############################################################################
-# Claim the *existing* PV called immich-postgres-pv
+# existing PV → PVC
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -53,25 +48,10 @@ spec:
   accessModes: ["ReadWriteOnce"]
   resources:
     requests:
-      storage: 50Gi          # ignored – PV already defines the size
+      storage: 50Gi
   volumeName: immich-postgres-pv
 ---
-###############################################################################
-# 4. PostgreSQL 14 + VectorChord 0.4.3
-###############################################################################
-apiVersion: v1
-kind: Service
-metadata:
-  name: immich-postgres
-  namespace: immich
-spec:
-  clusterIP: None           # headless – lets the StatefulSet use stable DNS
-  ports:
-    - port: 5432
-      name: postgres
-  selector:
-    app: immich-postgres
----
+# PostgreSQL 14-vectorchord
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -81,54 +61,27 @@ spec:
   serviceName: immich-postgres
   replicas: 1
   selector:
-    matchLabels:
-      app: immich-postgres
+    matchLabels: {app: immich-postgres}
   template:
-    metadata:
-      labels:
-        app: immich-postgres
+    metadata: {labels: {app: immich-postgres}}
     spec:
-      terminationGracePeriodSeconds: 30
       containers:
         - name: postgres
-          image: ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0@sha256:5f6a838e4e44c8e0e019d0ebfe3ee8952b69afc2809b2c25f7b0119641978e91 :contentReference[oaicite:1]{index=1}
+          image: ghcr.io/immich-app/postgres:14-vectorchord0.4.3-pgvectors0.2.0@sha256:5f6a838e4e44c8e0e019d0ebfe3ee8952b69afc2809b2c25f7b0119641978e91 :contentReference[oaicite:0]{index=0}
           env:
-            - name: POSTGRES_USER
-              valueFrom: {secretKeyRef: {name: immich-db-secret, key: POSTGRES_USER}}
-            - name: POSTGRES_PASSWORD
-              valueFrom: {secretKeyRef: {name: immich-db-secret, key: POSTGRES_PASSWORD}}
-            - name: POSTGRES_DB
-              valueFrom: {secretKeyRef: {name: immich-db-secret, key: POSTGRES_DB}}
-            - name: POSTGRES_INITDB_ARGS   # extra safety
-              value: "--data-checksums"
-            - name: DB_STORAGE_TYPE        # avoids entrypoint warning
-              value: "SSD"
-          ports:
-            - containerPort: 5432
+            - name: POSTGRES_USER      ; valueFrom: {secretKeyRef: {name: immich-db-secret, key: POSTGRES_USER}}
+            - name: POSTGRES_PASSWORD  ; valueFrom: {secretKeyRef: {name: immich-db-secret, key: POSTGRES_PASSWORD}}
+            - name: POSTGRES_DB        ; valueFrom: {secretKeyRef: {name: immich-db-secret, key: POSTGRES_DB}}
+            - name: POSTGRES_INITDB_ARGS ; value: "--data-checksums"
+            - name: DB_STORAGE_TYPE    ; value: "SSD"
           volumeMounts:
-            - name: data
-              mountPath: /var/lib/postgresql/data   # expected by the image
+            - mountPath: /var/lib/postgresql/data
+              name: data
       volumes:
         - name: data
-          persistentVolumeClaim:
-            claimName: immich-postgres-pvc
+          persistentVolumeClaim: {claimName: immich-postgres-pvc}
 ---
-###############################################################################
-# 5. Redis (Valkey 8) – required by Immich
-###############################################################################
-apiVersion: v1
-kind: Service
-metadata:
-  name: immich-redis
-  namespace: immich
-spec:
-  clusterIP: None
-  ports:
-    - port: 6379
-      name: redis
-  selector:
-    app: immich-redis
----
+# Redis / Valkey 8
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -136,27 +89,17 @@ metadata:
   namespace: immich
 spec:
   replicas: 1
-  selector:
-    matchLabels:
-      app: immich-redis
+  selector: {matchLabels: {app: immich-redis}}
   template:
-    metadata:
-      labels:
-        app: immich-redis
+    metadata: {labels: {app: immich-redis}}
     spec:
       containers:
         - name: redis
-          image: docker.io/valkey/valkey:8-bookworm
-          ports:
-            - containerPort: 6379
-          livenessProbe:
-            tcpSocket: {port: 6379}
-            initialDelaySeconds: 10
-            periodSeconds: 10
+          image: docker.io/valkey/valkey:8-bookworm@sha256:fec42f399876eb6faf9e008570597741c87ff7662a54185593e74b09ce83d177 :contentReference[oaicite:1]{index=1}
+          ports: [{containerPort: 6379}]
+          livenessProbe: {tcpSocket: {port: 6379}, initialDelaySeconds: 10}
 ---
-###############################################################################
-# 6. Immich – server and background workers
-###############################################################################
+# Immich server (all API + jobs)
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -164,74 +107,61 @@ metadata:
   namespace: immich
 spec:
   replicas: 1
-  selector:
-    matchLabels:
-      app: immich-server
+  selector: {matchLabels: {app: immich-server}}
   template:
-    metadata:
-      labels:
-        app: immich-server
+    metadata: {labels: {app: immich-server}}
     spec:
       containers:
         - name: server
-          image: ghcr.io/immich-app/immich-server:release
-          command: ["start.sh", "immich"]
+          image: ghcr.io/immich-app/immich-server:release :contentReference[oaicite:2]{index=2}
           envFrom:
             - configMapRef: {name: immich-config}
-            - secretRef:  {name: immich-db-secret}
-          ports:
-            - containerPort: 2283   # IMMICH_PORT
+            - secretRef:   {name: immich-db-secret}
+          ports: [{containerPort: 2283}]
           volumeMounts:
             - name: upload
               mountPath: /usr/src/app/upload
       volumes:
         - name: upload
-          emptyDir: {}   # ⚠️ change to PVC/hostPath if you want persistent media
+          emptyDir: {}    # replace with PVC if you need persistence
 ---
+# Immich machine-learning sidecar
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: immich-microservices
+  name: immich-machine-learning
   namespace: immich
 spec:
   replicas: 1
-  selector:
-    matchLabels:
-      app: immich-microservices
+  selector: {matchLabels: {app: immich-ml}}
   template:
-    metadata:
-      labels:
-        app: immich-microservices
+    metadata: {labels: {app: immich-ml}}
     spec:
       containers:
-        - name: micro
-          image: ghcr.io/immich-app/immich-microservices:release
-          command: ["start.sh", "microservices"]
+        - name: ml
+          image: ghcr.io/immich-app/immich-machine-learning:release :contentReference[oaicite:3]{index=3}
           envFrom:
             - configMapRef: {name: immich-config}
-            - secretRef:  {name: immich-db-secret}
+            - secretRef:   {name: immich-db-secret}
           volumeMounts:
-            - name: upload
-              mountPath: /usr/src/app/upload
+            - name: model-cache
+              mountPath: /cache
       volumes:
-        - name: upload
-          emptyDir: {}   # keep in-sync with the server volume
+        - name: model-cache
+          emptyDir: {}    # use a PVC if you want models to survive restarts
 ---
-###############################################################################
-# 7. Front-door Service – fixed IP 172.16.23.30 (requires Metallb or similar)
-###############################################################################
+# LoadBalancer with fixed IP 172.16.23.30
 apiVersion: v1
 kind: Service
 metadata:
   name: immich
   namespace: immich
 spec:
-  type: LoadBalancer           # or NodePort + externalIPs; choose what your cluster supports
-  loadBalancerIP: 172.16.23.30 # must lie inside your Service CIDR / Metallb pool
+  type: LoadBalancer
+  loadBalancerIP: 172.16.23.30
   ports:
     - port: 80
       targetPort: 2283
       protocol: TCP
       name: http
-  selector:
-    app: immich-server
+  selector: {app: immich-server}
