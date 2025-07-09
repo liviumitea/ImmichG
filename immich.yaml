@@ -50,7 +50,7 @@ spec:
   accessModes: ["ReadWriteOnce"]
   resources:
     requests:
-      storage: 50Gi          # ignored; size comes from the PV
+      storage: 20Gi          # ignored; size comes from the PV
   volumeName: immich-postgres-pv
 ---
 ###############################################################################
