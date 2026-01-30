@@ -182,7 +182,7 @@ spec:
     spec:
       containers:
         - name: server
-          image: ghcr.io/immich-app/immich-server:v2.5.0
+          image: ghcr.io/immich-app/immich-server:v2.5.2
           envFrom:
             - configMapRef:
                 name: immich-config
@@ -219,7 +219,7 @@ spec:
     spec:
       containers:
         - name: ml
-          image: ghcr.io/immich-app/immich-machine-learning:v2.5.0
+          image: ghcr.io/immich-app/immich-machine-learning:v2.5.2
           envFrom:
             - configMapRef:
                 name: immich-config
