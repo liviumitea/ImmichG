@@ -265,7 +265,7 @@ spec:
       enableServiceLinks: false
       containers:
         - name: machine-learning
-          image: ghcr.io/immich-app/immich-machine-learning:v3.0.2
+          image: ghcr.io/immich-app/immich-machine-learning:v3.1.0
           imagePullPolicy: IfNotPresent
           env:
             - name: TZ
@@ -358,7 +358,7 @@ spec:
 
       containers:
         - name: server
-          image: ghcr.io/immich-app/immich-server:v3.0.2
+          image: ghcr.io/immich-app/immich-server:v3.1.0
           imagePullPolicy: IfNotPresent
           envFrom:
             - configMapRef:
